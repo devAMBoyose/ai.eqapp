@@ -39,11 +39,16 @@
   <header>
     <h1>PH Quake Watch <small>Live earthquakes (last 24h) around the Philippines</small></h1>
   </header>
+  <h3>⚡ Predicted Seismic Activity (Next 24H)</h3>
+  <ul id="forecast"></ul>
+
 
   <div id="app">
     <div id="map"></div>
     <div class="panel" id="list"></div>
   </div>
+  
+
 
   <!-- Leaflet JS -->
   <script
@@ -182,5 +187,8 @@
     return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
   </script>
+  <script src="main.js"></script>
+    <script src="js/app.js"></script>
+<script src="js/forecast.js"></script>
 </body>
 </html>
