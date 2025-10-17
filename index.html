@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PH Quake Watch (MVP)</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    :root{
+      --bg:#0f1220; --card:#171a2b; --text:#e9ecf4; --muted:#97a1b3; --accent:#48c78e;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,Segoe UI,Roboto,Arial}
+    header{padding:14px 16px;border-bottom:1px solid #222538}
+    header h1{margin:0;font-size:18px}
+    header small{display:block;color:var(--muted)}
+    #app{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;padding:12px}
+    #map{height:75vh;border-radius:12px;overflow:hidden;border:1px solid #222538}
+    .panel{background:var(--card);border:1px solid #222538;border-radius:12px;overflow:auto;max-height:75vh}
+    .row{display:flex;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid #222538}
+    .row:hover{background:#1d2137}
+    .mag{min-width:56px;text-align:center;padding:6px 8px;border-radius:10px;font-weight:700}
+    .loc{flex:1}
+    .time{color:var(--muted);font-size:12px}
+    .legend{display:flex;gap:6px;align-items:center;padding:8px 10px;color:var(--muted);font-size:12px}
+    .dot{width:12px;height:12px;border-radius:50%}
+    @media (max-width: 900px){ #app{grid-template-columns:1fr;}; #map{height:60vh} }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PH Quake Watch <small>Live earthquakes (last 24h) around the Philippines</small></h1>
+  </header>
+
+  <div id="app">
+    <div id="map"></div>
+    <div class="panel" id="list"></div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+  // ---- CONFIG ---------------------------------------------------------------
+  // Philippines bounding box ~ lat 4–21 N, lon 116–127 E
+  const BOUNDS = { minlat: 4, maxlat: 21, minlon: 116, maxlon: 127 };
+  // Get past 24h events >= M2.5 in that box from USGS FDSN/GeoJSON
+  // Docs: https://earthquake.usgs.gov/fdsnws/event/1/ (and GeoJSON feeds)
+  const USGS_URL = (startISO, endISO) =>
+    `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${startISO}&endtime=${endISO}&minlatitude=${BOUNDS.minlat}&maxlatitude=${BOUNDS.maxlat}&minlongitude=${BOUNDS.minlon}&maxlongitude=${BOUNDS.maxlon}&minmagnitude=2.5&orderby=time`;
+
+  // Color scale by magnitude
+  function magColor(m){
+    return m >= 6 ? '#d73027' :
+           m >= 5 ? '#fc8d59' :
+           m >= 4 ? '#fee08b' :
+           m >= 3 ? '#d9ef8b' : '#91cf60';
+  }
+
+  // ---- MAP -----------------------------------------------------------------
+  const map = L.map('map',{ zoomControl:true, worldCopyJump:true })
+    .setView([12.8797, 121.7740], 5); // center on PH
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    attribution:'&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  const markers = L.layerGroup().addTo(map);
+
+  // ---- FETCH & RENDER -------------------------------------------------------
+  async function loadQuakes(){
+    const end   = new Date();
+    const start = new Date(end.getTime() - 24*60*60*1000);
+    const startISO = start.toISOString().slice(0,19);
+    const endISO   = end.toISOString().slice(0,19);
+
+    const url = USGS_URL(startISO, endISO);
+    const res = await fetch(url);
+    const data = await res.json();
+
+    markers.clearLayers();
+    const list = document.getElementById('list');
+    list.innerHTML = '';
+
+    if(!data.features?.length){
+      list.innerHTML = '<div class="row"><div>No earthquakes in the last 24 hours for this region.</div></div>';
+      return;
+    }
+
+    data.features.forEach(f=>{
+      const p = f.properties;
+      const [lon,lat,depth] = f.geometry.coordinates;
+      const m = p.mag ?? 0;
+      const when = new Date(p.time);
+      const timeText = when.toLocaleString();
+
+      // marker circle
+      const circle = L.circleMarker([lat,lon],{
+        radius: Math.max(4, m*2),
+        fillColor: magColor(m),
+        color: '#111',
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.85
+      }).addTo(markers);
+
+      circle.bindPopup(`
+        <b>M ${m.toFixed(1)}</b> – ${p.place || 'Location'}<br/>
+        Depth: ${depth.toFixed(1)} km<br/>
+        Time: ${timeText}<br/>
+        <a href="${p.url}" target="_blank" rel="noopener">Details</a>
+      `);
+
+      // list row
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <div class="mag" style="background:${magColor(m)}">${m.toFixed(1)}</div>
+        <div class="loc">
+          <div>${p.place || 'Location'}</div>
+          <div class="time">${timeText} · Depth ${depth.toFixed(0)} km</div>
+        </div>
+      `;
+      row.onclick = ()=> { map.setView([lat,lon], 7); circle.openPopup(); };
+      list.appendChild(row);
+    });
+  }
+
+  // initial load + refresh every 2 minutes
+  loadQuakes();
+  setInterval(loadQuakes, 120000);
+
+  // ---- Optional: notify if a nearby stronger quake occurs -------------------
+  if ('geolocation' in navigator && 'Notification' in window) {
+    Notification.requestPermission();
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const you = L.circle([pos.coords.latitude, pos.coords.longitude],{radius:200, color:'#48c78e'}).addTo(map);
+      you.bindTooltip('You are here').openTooltip();
+
+      // simple watcher: re-check after each refresh
+      const checkNearby = async () => {
+        const end   = new Date();
+        const start = new Date(end.getTime() - 60*60*1000); // last 1h
+        const startISO = start.toISOString().slice(0,19);
+        const endISO   = end.toISOString().slice(0,19);
+        const url = USGS_URL(startISO, endISO);
+        const res = await fetch(url); const data = await res.json();
+        const near = data.features?.find(f=>{
+          const [lon,lat] = f.geometry.coordinates;
+          const d = haversine(pos.coords.latitude, pos.coords.longitude, lat, lon);
+          return (f.properties.mag ?? 0) >= 4.5 && d <= 300; // >=M4.5 within 300km
+        });
+        if(near && Notification.permission === 'granted'){
+          new Notification(`Earthquake M${near.properties.mag.toFixed(1)}`,{
+            body:`${near.properties.place} — tap for details`,
+          });
+        }
+      };
+      setInterval(checkNearby, 120000);
+    });
+  }
+
+  // Haversine distance in km
+  function haversine(lat1,lon1,lat2,lon2){
+    const toRad = d => d*Math.PI/180;
+    const R = 6371;
+    const dLat = toRad(lat2-lat1);
+    const dLon = toRad(lon2-lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+  </script>
+</body>
+</html>

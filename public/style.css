@@ -1,0 +1,11 @@
+:root { color-scheme: dark light; }
+body { font-family: system-ui, sans-serif; margin: 16px; }
+header { margin-bottom: 12px; }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+#status { padding: 8px; background: #f0f0f0; border-radius: 8px; color: #333; }
+ul#events { list-style: none; padding: 0; }
+.event { border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin-bottom: 8px; }
+.event strong { font-size: 1.05rem; }
+.badge { display: inline-block; padding: 2px 6px; border-radius: 6px; background: #eee; margin-left: 6px; }
+.badge.tsunami { background: #ffd8d8; color: #900; }
+.alert { background: #fff3cd; border-color: #ffeeba; }
