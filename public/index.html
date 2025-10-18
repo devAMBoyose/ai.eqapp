@@ -1,52 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Quake Alert PH (MVP)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PH Quake Watch (MVP)</title>
 
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  />
 
-
+  <style>
+    :root{ --bg:#0f1220; --card:#171a2b; --text:#e9ecf4; --muted:#97a1b3; }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,Segoe UI,Roboto,Arial}
+    header{padding:14px 16px;border-bottom:1px solid #222538}
+    header h1{margin:0;font-size:18px}
+    header small{display:block;color:var(--muted)}
+    #app{display:grid;grid-template-columns:1.2fr .8fr;gap:12px;padding:12px}
+    #map{height:75vh;border-radius:12px;overflow:hidden;border:1px solid #222538;background:#0c1020}
+    .panel{background:var(--card);border:1px solid #222538;border-radius:12px;overflow:auto;max-height:75vh}
+    .row{display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid #222538}
+    .mag{min-width:56px;text-align:center;padding:6px 8px;border-radius:10px;font-weight:700}
+    .loc{flex:1}
+    .time{color:var(--muted);font-size:12px}
+    h3{margin:12px 16px 0}
+    #forecast{margin:6px 16px 0; padding-left:18px}
+    @media (max-width:900px){ #app{grid-template-columns:1fr} #map{height:60vh} }
+  </style>
 </head>
 <body>
   <header>
-    <h1>Quake Alert PH (MVP)</h1>
-    <p>Live quakes feed + nearby alerts. Allow location for best results.</p>
+    <h1>PH Quake Watch <small>Live earthquakes (last 24h) around the Philippines</small></h1>
   </header>
 
-  <section class="controls">
-    <label>
-      Alert radius (km):
-      <input id="radiusKm" type="number" min="10" max="1000" step="10" value="200">
-    </label>
-    <label>
-      Min magnitude:
-      <input id="minMag" type="number" min="1" max="10" step="0.1" value="4.5">
-    </label>
-    <button id="testBeep">Test Alert Sound</button>
-  </section>
+  <!-- Forecast section (populated by app.js) -->
+  <h3>⚡ Predicted Seismic Activity (Next 24H)</h3>
+  <ul id="forecast"></ul>
 
-  <section id="status">Requesting your location…</section>
+  <!-- Map + list layout -->
+  <div id="app">
+    <div id="map" aria-label="Map of recent earthquakes"></div>
+    <div class="panel" id="list" aria-live="polite"></div>
+  </div>
 
-  <section>
-    <h2>Recent events</h2>
-    <ul id="events"></ul>
-  </section>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <!-- Your app logic (map + fetch + forecast) -->
+  <script src="./app.js"></script>
 
-  <audio id="beep" preload="auto">
-    <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYA…" type="audio/wav">
-    <!-- tiny embedded beep; replace with your own mp3 if you like -->
-  </audio>
-
-  <input id="lat" type="number" step="0.0001" placeholder="Lat (e.g., 14.5995)" />
-<input id="lon" type="number" step="0.0001" placeholder="Lon (e.g., 120.9842)" />
-<button id="use-manual">Use manual location</button>
-<span id="status">Requesting your location...</span>
-
-
-  <script src="app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="/ai.eqapp/main.js"></script>
+  <noscript>This app requires JavaScript to run.</noscript>
 </body>
 </html>

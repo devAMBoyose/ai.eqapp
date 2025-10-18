@@ -1,84 +1,144 @@
-// === PH Quake Watch ===
-// Fetches earthquake data and generates a 24H activity forecast
+// PH Quake Watch — Map + 24H Forecast
+console.log("✅ PH Quake Watch starting...");
 
-async function loadQuakes({ lat, lon }) {
-  const now = new Date();
-  const start = new Date(now.getTime() - 24 * 60 * 60 * 1000); // past 24 hours
+const $ = (id) => document.getElementById(id);
 
-  try {
-    const res = await fetch(
-      `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${start.toISOString()}&endtime=${now.toISOString()}&minmagnitude=4.5`
-    );
-
-    const data = await res.json();
-    console.log("Fetched quake data:", data);
-
-    if (!data || !data.features) {
-      console.warn("No quake data found");
-      return;
-    }
-
-    // === Render Earthquake List ===
-    const eventsList = document.getElementById("events");
-    eventsList.innerHTML = ""; // clear previous
-
-    data.features.forEach(eq => {
-      const mag = eq.properties.mag;
-      const place = eq.properties.place;
-      const time = new Date(eq.properties.time).toLocaleString();
-      const li = document.createElement("li");
-      li.textContent = `M${mag} - ${place} (${time})`;
-      eventsList.appendChild(li);
-    });
-
-    // === 🔥 Generate Forecast ===
-    const forecast = detectHotspots(data.features);
-    displayForecast(forecast);
-
-  } catch (err) {
-    console.error("Error loading quakes:", err);
-  }
+function magColor(m) {
+  return m >= 6 ? '#d73027'
+    : m >= 5 ? '#fc8d59'
+    : m >= 4 ? '#fee08b'
+    : m >= 3 ? '#d9ef8b'
+    : '#91cf60';
 }
 
-// === Forecast Feature ===
-// Detects quake clusters by region and estimates activity intensity
+// ---- Forecast Analyzer ----
 function detectHotspots(quakes) {
   const clusters = {};
-
   quakes.forEach(q => {
-    const region = q.properties.place.split(",").pop().trim();
+    const p = q.properties || {};
+    const region = (p.place || '').split(',').pop().trim() || "Unspecified";
     if (!clusters[region]) clusters[region] = [];
-    clusters[region].push(q.properties.mag);
+    clusters[region].push(p.mag ?? 0);
   });
 
-  const forecast = Object.entries(clusters).map(([region, mags]) => {
-    const avgMag = mags.reduce((a, b) => a + b, 0) / mags.length;
-    const intensity =
-      avgMag > 5 ? "High" :
-      avgMag > 4 ? "Moderate" : "Low";
-
-    return { region, avgMag: avgMag.toFixed(2), intensity };
+  return Object.entries(clusters).map(([region, mags]) => {
+    const avg = mags.reduce((a, b) => a + b, 0) / mags.length;
+    const intensity = avg > 5 ? "High" : avg > 4 ? "Moderate" : "Low";
+    return { region, avgMag: avg.toFixed(2), intensity };
   });
-
-  return forecast;
 }
 
-// === Display Forecast on the Page ===
 function displayForecast(forecast) {
-  const forecastList = document.getElementById("forecast");
-  if (!forecastList) return;
+  const ul = $("forecast");
+  if (!ul) return;
+  ul.innerHTML = "";
 
-  forecastList.innerHTML = "";
   forecast.forEach(f => {
     const li = document.createElement("li");
-    li.textContent = `${f.region}: ${f.intensity} (avg mag ${f.avgMag})`;
-    forecastList.appendChild(li);
+    const color =
+      f.intensity === "High"
+        ? "#ef4444"
+        : f.intensity === "Moderate"
+        ? "#f59e0b"
+        : "#22c55e";
+    li.innerHTML = `
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:6px;"></span>
+      <strong>${f.region}</strong>: ${f.intensity} (avg mag ${f.avgMag})
+    `;
+    ul.appendChild(li);
   });
 }
 
-// === Initialize App ===
-// If you already call loadQuakes elsewhere, keep that.
-// Otherwise, auto-load data for PH center as default.
-window.addEventListener("load", () => {
-  loadQuakes({ lat: 12.8797, lon: 121.7740 }); // Philippines center
+// ---- Map Setup ----
+let map, markers;
+function setupMap() {
+  if (map) return;
+  map = L.map("map", { zoomControl: true, worldCopyJump: true })
+    .setView([12.8797, 121.7740], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  markers = L.layerGroup().addTo(map);
+}
+
+// ---- Fetch Quake Data ----
+const BOUNDS = { minlat: 4, maxlat: 21, minlon: 116, maxlon: 127 };
+const USGS_URL = (startISO, endISO) =>
+  `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${startISO}&endtime=${endISO}&minlatitude=${BOUNDS.minlat}&maxlatitude=${BOUNDS.maxlat}&minlongitude=${BOUNDS.minlon}&maxlongitude=${BOUNDS.maxlon}&minmagnitude=2.5&orderby=time`;
+
+async function loadQuakes() {
+  const list = $("list");
+  if (!list) return console.error("❌ Missing #list element");
+
+  let data;
+  try {
+    const end = new Date();
+    const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+    const startISO = start.toISOString().slice(0, 19);
+    const endISO = end.toISOString().slice(0, 19);
+
+    const res = await fetch(USGS_URL(startISO, endISO));
+    data = await res.json();
+    console.log("Fetched quake data:", data);
+  } catch (err) {
+    console.error("Fetch error:", err);
+    list.innerHTML = "<div class='row'><div>⚠️ Failed to load data.</div></div>";
+    return;
+  }
+
+  if (!data || !Array.isArray(data.features)) {
+    list.innerHTML = "<div class='row'><div>No data available.</div></div>";
+    return;
+  }
+
+  markers.clearLayers();
+  list.innerHTML = "";
+
+  data.features.forEach(f => {
+    const p = f.properties || {};
+    const [lon, lat, depth] = f.geometry?.coordinates || [0, 0, 0];
+    const m = p.mag ?? 0;
+    const time = new Date(p.time).toLocaleString();
+
+    const circle = L.circleMarker([lat, lon], {
+      radius: Math.max(4, m * 2),
+      fillColor: magColor(m),
+      color: "#111",
+      weight: 1,
+      opacity: 1,
+      fillOpacity: 0.85,
+    }).addTo(markers);
+
+    circle.bindPopup(`
+      <b>M${m.toFixed(1)}</b> – ${p.place || "Unknown"}<br/>
+      Depth: ${depth.toFixed(1)} km<br/>
+      Time: ${time}
+    `);
+
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `
+      <div class="mag" style="background:${magColor(m)}">${m.toFixed(1)}</div>
+      <div class="loc">
+        <div>${p.place || "Unknown"}</div>
+        <div class="time">${time} · Depth ${depth.toFixed(0)} km</div>
+      </div>
+    `;
+    row.onclick = () => {
+      map.setView([lat, lon], 7);
+      circle.openPopup();
+    };
+    list.appendChild(row);
+  });
+
+  // Forecast
+  const forecast = detectHotspots(data.features);
+  displayForecast(forecast);
+}
+
+// ---- Initialize ----
+window.addEventListener("DOMContentLoaded", () => {
+  setupMap();
+  loadQuakes();
+  setInterval(loadQuakes, 120000); // refresh every 2 mins
 });
